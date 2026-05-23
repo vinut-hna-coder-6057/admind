@@ -218,8 +218,8 @@ class AdRecommenderEngine:
 
                     score += PERSONALIZATION_WEIGHT
             # ─────────────────────────────
-# DIVERSITY CONTROL
-# ─────────────────────────────
+            # DIVERSITY CONTROL
+            # ─────────────────────────────
 
             if row["category"] in recent_ads:
 
@@ -288,11 +288,11 @@ class AdRecommenderEngine:
         # ─────────────────────────────────────
         save_history(
 
-        title,
+            title,
 
-        video_type,
+            video_type,
 
-        mode
+            mode
         )
 
         # ─────────────────────────────────────

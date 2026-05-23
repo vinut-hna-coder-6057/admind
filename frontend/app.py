@@ -40,7 +40,7 @@ if "admin_logged_in" not in st.session_state:
 
 
 # ─────────────────────────────────────────────────────
-# PAGEbackend.config
+# PAGE.config
 # ─────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -167,7 +167,7 @@ with st.sidebar:
 
 
 # ─────────────────────────────────────────────────────
-#backend.database INIT
+#database INIT
 # ─────────────────────────────────────────────────────
 
 init_db()
