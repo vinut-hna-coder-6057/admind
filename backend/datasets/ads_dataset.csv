@@ -1,0 +1,38 @@
+ad_name,description,category,mode
+DSA Course,Master Data Structures and Algorithms for placements,programming,"study,focus"
+Python Course,Learn Python programming from beginner to advanced,programming,"study,focus"
+Java Spring Boot Masterclass,Build enterprise backend applications using Spring Boot,programming,"study,focus"
+AI & Machine Learning Bootcamp,Learn AI deep learning and NLP from scratch,technology,"study,focus"
+LeetCode Premium,Practice coding interviews with premium problems,programming,"study,focus"
+Udemy Programming Courses,Affordable online courses for developers,education,"study"
+
+Gaming Laptop Sale,RTX-powered gaming laptops for creators and gamers,devices,"casual,entertainment"
+Mechanical Keyboard,RGB mechanical keyboards for coders and gamers,devices,"focus,casual"
+Wireless Earbuds,Noise cancelling earbuds for music and productivity,devices,"casual,focus"
+4K Monitor,Ultra HD monitor for coding and gaming setup,devices,"focus,study"
+Cloud Storage Platform,Secure cloud backup for files and projects,technology,"focus,professional"
+
+Gaming Chair,Ergonomic gaming chair for long gaming sessions,gaming,"casual,entertainment"
+Steam Game Sale,Top AAA games available at discounted prices,gaming,"casual,entertainment"
+Esports Tournament,Join online competitive gaming tournaments,gaming,"entertainment"
+
+Finance Investment App,Smart investment and portfolio management platform,finance,"professional"
+Stock Trading Platform,Trade stocks and monitor market trends live,finance,"professional"
+LinkedIn Premium,Grow your professional network and career opportunities,professional,"focus,professional"
+Productivity Workspace,Collaborative workspace for remote teams,productivity,"focus,professional"
+
+Netflix Subscription,Watch trending movies and TV shows online,entertainment,"casual,entertainment"
+Spotify Premium,Ad-free music streaming with offline downloads,entertainment,"casual,sleep"
+Movie Ticket Booking,Book tickets for latest blockbuster movies,entertainment,"casual"
+
+Fast Food Combo,Order delicious burgers and pizza online,food,"casual,entertainment"
+Healthy Meal Delivery,Fresh healthy meals delivered to your home,food,"focus,professional"
+Coffee Subscription,Premium coffee delivered monthly,food,"focus"
+
+Meditation App,Relax and improve concentration using meditation,wellness,"focus,sleep"
+Sleep Sounds Premium,Improve sleep quality with calming sounds,wellness,"sleep"
+Fitness Tracker,Track workouts calories and daily health goals,wellness,"focus,casual"
+
+Clothing Sale,Latest fashion trends and clothing discounts,fashion,"casual,entertainment"
+Sneaker Collection,Limited edition sneakers for fashion enthusiasts,fashion,"casual"
+Luxury Watch Brand,Premium watches for professionals and collectors,fashion,"professional"
