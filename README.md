@@ -195,7 +195,9 @@ Video category is detected via majority voting over the top-5 FAISS nearest neig
 | Rate Limiting | SlowAPI |
 
 ---
+## 🏗️ System Architecture
 
+![System Architecture](docs/architecture.png)
 ## 🔐 Admin Panel
 
 Access the admin panel by logging in with your `ADMIN_PASSWORD` from the sidebar. The panel lets you view recommendation history, manage ads, and inspect system analytics.
