@@ -1,1 +1,16 @@
+streamlit
+plotly
+streamlit-option-menu
+requests
 
+fastapi
+uvicorn
+pydantic
+slowapi
+python-dotenv
+pandas
+numpy
+scikit-learn
+sentence-transformers
+faiss-cpu
+google-api-python-client
