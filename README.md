@@ -1,209 +1,96 @@
-# ▶️ AdMind — Smart Ad Recommendation Engine
+# AdMind
 
-AdMind is an AI-powered ad recommendation system built for YouTube-style platforms. It intelligently matches ads to video content using semantic embeddings, user personalization, CTR optimization, and feedback learning — all wrapped in a sleek Streamlit dashboard with a FastAPI backend.
+AdMind is a Streamlit dashboard and FastAPI service for matching advertisements to YouTube video titles. The dashboard calls the shared recommendation engine directly; it does not send local HTTP requests to FastAPI.
 
----
+## Current capabilities and limits
 
-## ✨ Features
+- Recommendation uses the `youtube_analytics.csv` video-title dataset for nearest-neighbour category detection and the SQLite advertisement catalogue for ranking.
+- The video category is selected by majority vote among up to five nearest video-title neighbours. It is context only. Ads are ranked by cosine similarity between the video title and the ad name plus description; lexical overlap breaks ties and is the fallback if embeddings fail. The score is raw, not a probability or calibrated confidence.
+- Mode, audience, CTR, and global per-ad feedback do not increase relevance ranking. Feedback is not video-scoped, so it cannot safely indicate relevance for a specific video. The starter labeling packet has 12 source titles and 120 candidate pairs; all labels are pending, so no quality metrics or improvement claim are available. See [recommendation evaluation](docs/recommendation-evaluation.md) for how to regenerate and label it.
+- Streamlit supports viewing modes `study`, `focus`, `casual`, and `silent`; audience values are `student`, `developer`, `gamer`, `professional`, and `casual`.
+- A descriptive YouTube title is required for recommendation. The dashboard accepts an optional title override when metadata is unavailable or needs correction; the video ID is never treated as content. The embedding model is loaded on the first recommendation request, not at app startup. If FAISS is unavailable, vector search uses a NumPy fallback; semantic embedding inference still requires the model and its dependencies.
+- Admin is a view-only catalogue page. It is protected by a password hash in the Streamlit session. There are no administrative FastAPI routes.
+- Analytics are aggregate counts by ad, not a time series. An impression means a recommendation result was displayed. Feedback is stored separately. A click is accepted only when linked to an impression for the same request; the app currently has no destination-click control because the catalogue has no destination URL field.
 
-- **Semantic Ad Matching** — Uses `sentence-transformers` to embed video titles and match them with the most relevant ads by description and category
-- **User Personalization** — Tailors recommendations based on user type: `student`, `developer`, `gamer`, `professional`, or `casual`
-- **Mode Awareness** — Respects viewing modes (`study` / `casual`) and detects content-mode conflicts with a smart popup alert
-- **CTR Optimization** — Boosts ads with historically higher click-through rates
-- **Feedback Learning** — Adjusts scores based on user thumbs-up/thumbs-down feedback
-- **Diversity Control** — Penalizes recently shown ad categories to avoid repetition
-- **Analytics Dashboard** — Visualizes ad impressions, CTR trends, feedback stats, and recommendation history
-- **Admin Panel** — Password-protected panel for managing ads and viewing system metrics
-- **Rate Limiting** — API is protected with `slowapi` (10 requests/minute per IP)
+## Install and launch
 
----
+Run commands from the repository root. Python 3.14 is the currently verified runtime; other Python versions are not claimed as supported until CI validates them.
 
-## 🏗️ Project Structure
-
-```
-admind/
-├── backend/
-│   ├── api.py                  # FastAPI app & routes
-│   ├── config/
-│   │   └── config.py           # Env vars & ranking weights
-│   ├── database/
-│   │   ├── connection.py       # SQLite connection & init
-│   │   ├── ads.py              # Ad CRUD
-│   │   ├── feedback.py         # Feedback store & scores
-│   │   ├── history.py          # Recommendation history
-│   │   └── analytics.py        # CTR & impression tracking
-│   ├── services/
-│   │   ├── recommender_engine.py   # Core ranking logic
-│   │   ├── embedding_service.py    # Sentence-transformer wrapper
-│   │   ├── video_understanding.py  # Video category detection
-│   │   ├── vector_store.py         # FAISS vector index
-│   │   ├── dataset_service.py      # CSV dataset loader
-│   │   ├── youtube_api.py          # YouTube Data API client
-│   │   ├── analytics_service.py    # Analytics helpers
-│   │   └── category_map.py         # Category ID → name mapping
-│   ├── datasets/
-│   │   ├── ads_dataset.csv
-│   │   ├── videos_dataset.csv
-│   │   └── youtube_analytics.csv
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── app.py                  # Streamlit entry point
-│   ├── requirements.txt
-│   └── ui/
-│       ├── dashboard_page.py
-│       ├── analytics_page.py
-│       ├── admin_page.py
-│       ├── charts.py
-│       ├── components.py
-│       └── styles.py
-└── README.md
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+streamlit run frontend/app.py --server.address 127.0.0.1
 ```
 
----
+For a reproducible install on Linux x86_64 with Python 3.14, use the generated hash-locked set:
 
-## ⚙️ Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/your-username/admind.git
-cd admind
+```sh
+python -m pip install --require-hashes -r requirements-linux-py314.txt
 ```
 
-### 2. Create a virtual environment
+The lock includes application and CI security tools. Regenerate it from `requirements-linux-py314.in` with the pinned `pip-tools` version recorded in the audit process, then verify installation and tests on Linux before release. The unpinned `requirements.txt` is for local development only.
 
-```bash
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+Start the API separately when needed:
+
+```powershell
+python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000
 ```
 
-### 3. Configure environment variables
+The API provides `/`, `/health`, and rate-limited `POST /recommend-ad` (10 requests per minute per IP). Streamlit currently calls the engine directly. The API does not provide authentication for recommendation requests and should be exposed only in a deployment that supplies its own network controls.
 
-```bash
-cp backend/.env.example backend/.env
+`POST /recommend-ad` accepts a 1–500 character `title`, a supported `mode`, and optional `user_type` (default `casual`). The response includes `ad_name`, detected `video_type`, raw `relevance_score`, `relevance_basis`, `ranking_score`, the signals used in `explanation`, and mode-conflict fields. It does not return a confidence probability.
+
+## Architecture
+
+![AdMind architecture](docs/architecture.png)
+
+## Configuration
+
+Copy `.env.example` to `.env` in the repository root when configuration is needed:
+
+```dotenv
+YOUTUBE_API_KEY=
+ADMIN_PASSWORD_HASH=
+# DB_NAME=admind.db
 ```
 
-Edit `backend/.env`:
+`YOUTUBE_API_KEY` is optional. `ADMIN_PASSWORD_HASH` is required for admin login; if absent, login fails closed while dashboard and API imports continue to work. The accepted format is `pbkdf2_sha256$iterations$salt_hex$digest_hex`. Generate one without storing the password in source control:
 
-```env
-YOUTUBE_API_KEY=your_youtube_api_key
-ADMIN_PASSWORD=your_secure_password
-DB_NAME=admind.db
+```powershell
+python -c 'import hashlib,secrets,getpass; p=getpass.getpass(); s=secrets.token_bytes(16); n=600000; print("pbkdf2_sha256$"+str(n)+"$"+s.hex()+"$"+hashlib.pbkdf2_hmac("sha256",p.encode(),s,n).hex())'
 ```
 
-### 4. Install dependencies
+Set the printed value as `ADMIN_PASSWORD_HASH` in `.env`. `DB_NAME` defaults to `admind.db` in the repository root. Relative configured paths are also resolved from the repository root. The database is initialized additively; the old aggregate `analytics` table and history rows are retained.
 
-**Backend:**
-```bash
-pip install -r backend/requirements.txt
+## Datasets
+
+Datasets live under `backend/datasets/`:
+
+- `ads_dataset.csv`: `ad_name`, `description`, `category`, and comma-separated `mode` values. Rows seed the SQLite `ads` table with `INSERT OR IGNORE`.
+- `youtube_analytics.csv`: tab-separated data. The recommendation path uses `title` and `category_id`; `backend/services/dataset_service.py` normalizes headers and retains analytics columns when present.
+- `videos_dataset.csv`: a separate title/mode/category CSV currently not used by the recommendation path.
+
+The code verifies the exact YouTube category IDs it knows in `backend/services/category_map.py`; unknown IDs become `general`. Advertisement categories are not silently rewritten to YouTube category names. The title and description embedding similarities provide the cross-taxonomy comparison.
+
+## Ranking and analytics definitions
+
+The current relevance ranker compares the video title with each ad name plus its description using cosine similarity. Lexical overlap breaks cosine ties and is used when embeddings fail. Ads with empty descriptions and duplicate offerings are skipped. Video category is explanatory context and does not affect relevance order. Mode, audience, CTR, and feedback are not ranking signals. The raw similarity is not a calibrated probability. See the evaluation guide for the reproducible previous content-scoring baseline and how to label candidates before drawing quality conclusions.
+
+Aggregate CTR is `clicks / impressions`; when impressions are zero it is zero. A feedback action never creates a click. Event records use unique event IDs and a unique request/ad/event-type constraint so repeated writes for the same logical event do not increment aggregates twice. Existing aggregate counts predate event storage and are preserved in the `analytics` table, but the dashboard and ranking ignore them because old click totals may include feedback and cannot be reconstructed as valid events.
+
+## Database and data preservation
+
+SQLite tables are created by `backend.database.init_db()`, which runs at API startup and Streamlit startup. The migration adds `history.ad_category`, `history.session_id`, and an `analytics_events` table plus indexes. Existing history and aggregate analytics are left in place. Newly recorded history stores video category and selected ad category in separate columns. Diversity uses only ad categories for the current session; old rows without those values do not affect the penalty.
+
+Production-mode startup requires an explicitly provisioned database outside the source tree and does not seed catalogue rows. See [deployment preparation](docs/deployment.md), the [operations runbook](docs/operations-runbook.md), and the [privacy lifecycle](docs/privacy-and-data-lifecycle.md) for single-host deployment, backup/restore, retention, and owner decisions. The SQLite backup tool uses SQLite's online backup API and refuses to overwrite output files.
+
+## Tests
+
+Run the standard-library test suite from the repository root:
+
+```powershell
+python -m unittest discover -s tests -v
 ```
 
-**Frontend:**
-```bash
-pip install -r frontend/requirements.txt
-```
-
----
-
-## 🚀 Running the App
-
-### Start the Backend API
-
-```bash
-uvicorn backend.api:app --reload
-```
-
-The API will be available at `http://localhost:8000`.
-
-### Start the Frontend
-
-```bash
-cd frontend
-streamlit run app.py
-```
-
-The dashboard will open at `http://localhost:8501`.
-
----
-
-## 📡 API Reference
-
-### `GET /`
-Health check — returns a running status message.
-
-### `GET /health`
-Returns `{ "status": "healthy" }`.
-
-### `POST /recommend-ad`
-
-Rate limited to **10 requests/minute** per IP.
-
-**Request body:**
-```json
-{
-  "title": "How to build a neural network in Python",
-  "mode": "study",
-  "user_type": "student"
-}
-```
-
-**`user_type` options:** `casual` | `student` | `developer` | `gamer` | `professional`  
-**`mode` options:** `study` | `casual`
-
-**Response:**
-```json
-{
-  "ad_name": "Coursera Pro",
-  "video_type": "education",
-  "confidence": 87,
-  "mode_conflict": false,
-  "mode_message": "",
-  "adaptive_popup": false
-}
-```
-
----
-
-## 🧠 How the Ranking Works
-
-Each candidate ad is scored using a weighted formula:
-
-| Signal | Weight |
-|---|---|
-| Semantic similarity (title ↔ ad description/category) | ×10 |
-| Personalization match (user type ↔ ad category) | +4 |
-| Mode match | +2 |
-| CTR score | ×3 |
-| Feedback score | ×1.5 |
-| Diversity penalty (recently shown category) | −4 |
-
-Video category is detected via majority voting over the top-5 FAISS nearest neighbours from the video dataset.
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Backend API | FastAPI + Uvicorn |
-| Frontend | Streamlit |
-| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2`) |
-| Vector Search | FAISS (`faiss-cpu`) |
-| Database | SQLite |
-| Charts | Plotly |
-| Rate Limiting | SlowAPI |
-
----
-## 🏗️ System Architecture
-
-![System Architecture](docs/architecture.png)
-## 🔐 Admin Panel
-
-Access the admin panel by logging in with your `ADMIN_PASSWORD` from the sidebar. The panel lets you view recommendation history, manage ads, and inspect system analytics.
-
----
-
-## 📄 License
-
-MIT License. See [LICENSE](LICENSE) for details.
+The tests use a temporary SQLite database and do not call YouTube. Model inference and the live API are not required by these unit tests.

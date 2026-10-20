@@ -135,7 +135,7 @@ def section_tag(text):
 # KPI ROW
 # ─────────────────────────────────────────────────────
 
-def kpi_row(shown, ctr, pos, neg):
+def kpi_row(shown, clicks, ctr, pos, neg):
 
     pos = int(pos or 0)
 
@@ -143,34 +143,28 @@ def kpi_row(shown, ctr, pos, neg):
 
     shown = int(shown or 0)
 
-    total = pos + neg
-
-    sent = (
-        round(pos / total * 100, 1)
-        if total
-        else 0
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
     c1.metric(
         "Impressions",
         f"{shown:,}"
     )
 
-    c2.metric(
+    c2.metric("Clicks", f"{int(clicks or 0):,}")
+
+    c3.metric(
         "CTR",
         f"{ctr:.1f}%"
     )
 
-    c3.metric(
+    c4.metric(
         "👍 Positive",
         pos
     )
 
-    c4.metric(
-        "Sentiment",
-        f"{sent}%"
+    c5.metric(
+        "Negative",
+        neg
     )
 
 
@@ -209,7 +203,7 @@ def pipeline_visual(
 
     with c2:
 
-        st.markdown("##### AI TAG")
+        st.markdown("##### VIDEO CATEGORY CONTEXT")
 
         st.warning(detected)
 

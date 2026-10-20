@@ -9,7 +9,15 @@ from ui.components import (
 )
 
 
+def admin_authorized(session_state):
+    return bool(session_state.get("admin_logged_in", False))
+
+
 def admin_page():
+
+    if not admin_authorized(st.session_state):
+        st.error("Unauthorized Access")
+        return
 
     page_header(
         "Admin",

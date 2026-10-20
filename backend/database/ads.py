@@ -71,7 +71,7 @@ VALUES (?, ?, ?, ?, ?)
                 "Ads inserted successfully."
             )
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Failed to insert ads"
@@ -116,7 +116,7 @@ def load_ads():
 
             return df
 
-        except Exception as e:
+        except Exception:
 
             logger.exception(
                 "Failed to load ads"

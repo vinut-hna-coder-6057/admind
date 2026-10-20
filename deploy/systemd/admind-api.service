@@ -1,0 +1,25 @@
+[Unit]
+Description=AdMind recommendation API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admind
+Group=admind
+WorkingDirectory=/opt/admind
+EnvironmentFile=/etc/admind/admind.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HF_HOME=/var/cache/admind/huggingface
+ExecStart=/opt/admind/.venv/bin/uvicorn backend.api:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/admind /var/cache/admind
+
+[Install]
+WantedBy=multi-user.target

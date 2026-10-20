@@ -47,7 +47,7 @@ def load_youtube_dataset():
 
         return df
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Failed to load YouTube dataset"
@@ -106,7 +106,7 @@ def prepare_dataset(df):
 
         return df
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Failed to prepare dataset"

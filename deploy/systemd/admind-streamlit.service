@@ -1,0 +1,25 @@
+[Unit]
+Description=AdMind Streamlit dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admind
+Group=admind
+WorkingDirectory=/opt/admind
+EnvironmentFile=/etc/admind/admind.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HF_HOME=/var/cache/admind/huggingface
+ExecStart=/opt/admind/.venv/bin/streamlit run frontend/app.py --server.address=127.0.0.1 --server.port=8501 --server.headless=true
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/admind /var/cache/admind
+
+[Install]
+WantedBy=multi-user.target

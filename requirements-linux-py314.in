@@ -1,0 +1,5 @@
+-r requirements-dev.txt
+-c constraints-security.txt
+
+# Resolved on PyPI; the lock includes the complete torch dependency closure.
+torch==2.14.1
