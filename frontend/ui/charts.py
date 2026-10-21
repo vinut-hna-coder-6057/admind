@@ -84,14 +84,15 @@ def chart_ctr(df):
 
     fig = go.Figure()
 
-    fig.add_scatter(
+    fig.add_bar(
         x=d["ad_name"],
         y=d["ctr"],
-        mode="lines+markers"
+        name="CTR"
     )
 
     fig.update_layout(
-        title="CTR Trend",
+        title="CTR by Ad",
+        yaxis_title="Click-through rate (%)",
         **plot_cfg()
     )
 

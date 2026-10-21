@@ -15,7 +15,9 @@ def save_history(
 
     category,
 
-    mode
+    mode,
+    ad_category=None,
+    session_id=None
 ):
 
     with get_connection() as conn:
@@ -32,11 +34,15 @@ def save_history(
 
             mode,
 
+            ad_category,
+
+            session_id,
+
             created_at
 
         )
 
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
 
         """, (
 
@@ -45,6 +51,10 @@ def save_history(
             category,
 
             mode,
+
+            ad_category,
+
+            session_id,
 
             datetime.now().isoformat()
         ))
@@ -57,24 +67,30 @@ def save_history(
 # ─────────────────────────────────────────────────────
 
 def get_recent_ads(
-    limit=3
+    limit=3,
+    session_id=None
 ):
 
     with get_connection() as conn:
 
+        if not session_id:
+            return []
         cursor = conn.cursor()
 
         cursor.execute("""
 
-        SELECT category
+        SELECT ad_category
 
         FROM history
+        WHERE session_id = ? AND ad_category IS NOT NULL
 
         ORDER BY id DESC
 
         LIMIT ?
 
         """, (
+
+            session_id,
 
             limit,
 
@@ -90,24 +106,28 @@ def get_recent_ads(
     ]
 def get_recent_mode_mismatches(
     current_mode,
-    limit=5
+    limit=5,
+    session_id=None
 ):
 
     with get_connection() as conn:
 
         cursor = conn.cursor()
 
+        if not session_id:
+            return False
         cursor.execute("""
 
         SELECT category
 
         FROM history
+        WHERE session_id = ?
 
         ORDER BY id DESC
 
         LIMIT ?
 
-        """, (limit,))
+        """, (session_id, limit))
 
         rows = cursor.fetchall()
 

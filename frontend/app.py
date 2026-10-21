@@ -1,5 +1,4 @@
 import streamlit as st
-import logging
 import sys
 import os
 
@@ -10,9 +9,6 @@ sys.path.append(
             ".."
         )
     )
-)
-from backend.services.vector_store import (
-    vector_store
 )
 from streamlit_option_menu import option_menu
 
@@ -27,9 +23,19 @@ from ui.dashboard_page import dashboard_page
 from ui.analytics_page import analytics_page
 from ui.admin_page import admin_page
 
-from backend.config.config import (
-    ADMIN_PASSWORD
-)
+from backend.config.config import ADMIND_ENV, validate_production_settings, verify_admin_password
+
+
+@st.cache_resource
+def initialize_catalogue_database():
+    validate_production_settings()
+    init_db()
+    if ADMIND_ENV != "production":
+        insert_ads()
+    return True
+
+
+initialize_catalogue_database()
 # ─────────────────────────────────────────────────────
 # SESSION STATE
 # ─────────────────────────────────────────────────────
@@ -139,7 +145,7 @@ with st.sidebar:
 
             if st.button("Login"):
 
-                if password == ADMIN_PASSWORD:
+                if verify_admin_password(password):
 
                     st.session_state.admin_logged_in = True
 
@@ -152,7 +158,7 @@ with st.sidebar:
                 else:
 
                     st.error(
-                        "Invalid password"
+                        "Admin login is unavailable or the password is incorrect."
                     )
 
     else:
@@ -169,9 +175,6 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────
 #database INIT
 # ─────────────────────────────────────────────────────
-
-init_db()
-insert_ads()
 
 # ─────────────────────────────────────────────────────
 # ROUTING

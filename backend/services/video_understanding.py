@@ -71,7 +71,7 @@ def detect_video_category(
     )
 
     # ─────────────────────────────────
-    # AVERAGE CONFIDENCE
+    # AVERAGE NEIGHBOUR SIMILARITY (not advertisement relevance)
     # ─────────────────────────────────
 
     avg_score = (

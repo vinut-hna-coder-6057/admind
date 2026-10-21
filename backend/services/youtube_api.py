@@ -1,4 +1,5 @@
-from googleapiclient.discovery import build
+from urllib.parse import parse_qs, urlparse
+import re
 
 from backend.config.config import API_KEY
 
@@ -10,31 +11,25 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────
 
 def extract_video_id(url):
-
-    try:
-
-        if "watch?v=" in url:
-
-            return (
-                url.split("watch?v=")[1]
-                .split("&")[0]
-            )
-
-        elif "youtu.be/" in url:
-
-            return (
-                url.split("youtu.be/")[1]
-                .split("?")[0]
-            )
-
+    if not isinstance(url, str) or not url.strip() or len(url) > 2048:
         return None
-
-    except Exception as e:
-
-        logger.exception(
-            "Failed to fetch YouTube details"
-        )
-
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower().removeprefix("www.")
+        if parsed.scheme not in {"http", "https"}:
+            return None
+        if host in {"youtube.com", "m.youtube.com", "music.youtube.com"} and parsed.path.startswith("/shorts/"):
+            video_id = parsed.path.split("/")[2]
+        elif host in {"youtube.com", "m.youtube.com", "music.youtube.com"}:
+            video_id = parse_qs(parsed.query).get("v", [None])[0]
+            if parsed.path not in {"/watch", "/"}:
+                return None
+        elif host == "youtu.be":
+            video_id = parsed.path.strip("/").split("/")[0]
+        else:
+            return None
+        return video_id if video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id) else None
+    except (ValueError, IndexError):
         return None
 
 
@@ -54,13 +49,19 @@ def get_video_details(video_url):
 
             return None
 
+        if not API_KEY:
+            return None
+
+        from googleapiclient.discovery import build
+        import httplib2
         youtube = build(
 
             "youtube",
 
             "v3",
 
-            developerKey=API_KEY
+            developerKey=API_KEY,
+            http=httplib2.Http(timeout=5)
         )
 
         request = youtube.videos().list(
@@ -103,10 +104,18 @@ def get_video_details(video_url):
             tags
         )
 
-    except Exception as e:
+    except Exception:
 
-        logger.exception(
-            "Failed to fetch YouTube details"
-        )
+        logger.warning("YouTube video details are unavailable")
 
         return None
+
+
+def choose_video_title(title_override, details):
+    """Prefer an explicit user correction, then fall back to fetched metadata."""
+    override = (title_override or "").strip()
+    if override:
+        return override
+    if details and details[0]:
+        return str(details[0]).strip()
+    return ""

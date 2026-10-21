@@ -70,10 +70,12 @@ def analytics_page():
 
     kpi_row(
         shown,
+        clicked,
         ctr,
         pos,
         neg
     )
+    st.caption("Impression = a recommendation displayed. CTR = recorded destination clicks ÷ impressions. Feedback actions do not count as clicks.")
 
     st.markdown(
         '<div style="height:1rem"></div>',

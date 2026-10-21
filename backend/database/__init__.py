@@ -27,3 +27,10 @@ from .analytics import (
 from .history import (
     get_recent_mode_mismatches
 )
+
+__all__ = [
+    "init_db", "get_connection", "insert_ads", "load_ads",
+    "save_feedback", "get_feedback_score", "get_feedback_stats",
+    "save_history", "get_recent_ads", "get_recent_mode_mismatches",
+    "track_shown", "track_clicked", "get_analytics", "get_ctr_scores",
+]

@@ -62,7 +62,7 @@ def get_feedback_score():
 
             ad_name,
 
-            SUM(
+            AVG(
 
                 CASE
 
@@ -70,7 +70,8 @@ def get_feedback_score():
 
                     THEN 1
 
-                    ELSE -1
+                    WHEN feedback='negative' THEN -1
+                    ELSE 0
 
                 END
 
