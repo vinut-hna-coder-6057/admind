@@ -318,7 +318,7 @@ class RecommendationScoringTest(unittest.TestCase):
         self.assertIn("Description B", document)
         self.assertNotIn("<script>alert(1)</script>", document)
         self.assertIn("\\u003cscript\\u003e", document)
-        self.assertIn("Source records have no verified video IDs", document)
+        self.assertIn("The source dataset has no video IDs", document)
 
     def test_label_packet_is_deterministic_and_unlabeled(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -351,13 +351,16 @@ class RecommendationScoringTest(unittest.TestCase):
     def test_offline_evaluation_reports_pending_without_quality_claim(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             labels = os.path.join(temp_dir, "labels.csv")
+            manifest = os.path.join(temp_dir, "manifest.csv")
             output = os.path.join(temp_dir, "result.json")
-            pd.DataFrame([{
+            packet = pd.DataFrame([{
                 "video_id": "source-row-1", "video_title": "Music album review",
                 "ad_name": "Spotify Premium", "relevance": "", "judgment_status": "pending",
                 "split": "held_out",
-            }]).to_csv(labels, index=False)
-            report = evaluate(labels, output)
+            }])
+            packet.to_csv(labels, index=False)
+            packet[["video_id", "ad_name", "split"]].to_csv(manifest, index=False)
+            report = evaluate(labels, output, packet_path=manifest)
         self.assertEqual(report["status"], "awaiting_labels")
         self.assertIsNone(report["metrics"])
         self.assertEqual(report["pending_pairs"], 1)

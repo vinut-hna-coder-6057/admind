@@ -3,6 +3,7 @@ name: Python quality and security
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -55,3 +56,9 @@ jobs:
         run: |
           mkdir -p artifacts
           python -m backend.services.offline_evaluation --labels docs/recommendation-labels.csv --output artifacts/recommendation-evaluation.json --k 5
+      - name: Preserve evaluation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-evaluation
+          path: artifacts/recommendation-evaluation.json
+          if-no-files-found: error

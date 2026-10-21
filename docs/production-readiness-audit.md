@@ -243,3 +243,105 @@ $env:PYTHONPATH = "$env:LOCALAPPDATA\Temp\admind-security-tools"
 ```
 
 For a disposable API load run, start Uvicorn in one shell with a fresh temporary `DB_NAME`, `ADMIND_ENV=development`, `HF_HUB_OFFLINE=1`, and `--host 127.0.0.1 --port 8767 --workers 1`. In a second shell run `& $py -m backend.services.local_load_test --port 8767 --requests 4 --concurrency 4 --mode valid --pid <API_PID>`, then stop only that Uvicorn process. The temp database and process used for this verification were removed/stopped; the measured result above is retained here.
+
+## Production-readiness follow-up (2026-10-20)
+
+**Status remains NOT READY for production.** This follow-up preserves existing project data and leaves all source labels and privacy/hosting decisions unchanged. No rank weights, public infrastructure, production database, DNS, firewall, or public service were changed.
+
+### Labeling packet and reviewer workflow
+
+- `docs/recommendation-labels.csv` still contains 12 videos / 120 pairs, 120 `pending`, zero ratings, and no provisional labels. There were no AI-generated judgments to separate from human-reviewed judgments.
+- Improved `backend/services/labeling_review.py` to embed a video only when a separate packet copy carries an HTTPS YouTube URL, verification status, verifier/date, and verification source. It renders the actual ad name, description, category, and mode for every candidate in the grouped set; it contains no ranking scores or order cues. The embed URL is constructed from a validated YouTube host and ID, and metadata is rendered with `textContent`.
+- A subsequent source audit revised the earlier eight-match claim: four candidate URLs now have official metadata corroborating exact title/channel/date; four remain uncertain and unembedded. Three records remain without any URL, while the EMMA candidate conflicts with the packet's 2020 date and is not substituted. See `docs/recommendation-video-source-matches.md` for evidence and manual procedures. Even metadata-confirmed URLs still require footage confirmation.
+- Created separate `artifacts/recommendation-labels-human-review.csv` and `artifacts/recommendation-human-review.html`; the earlier generated artifacts were preserved. The new reviewer groups all 120 pairs with split, stable video key, complete candidate count, video/source evidence notes, actual ad metadata, rating controls, and notes. Development and held-out CSVs export separately. The evaluator rejects missing IDs, duplicate pairs, invalid/missing ratings, split changes, and incomplete candidate sets. Held-out results are sealed unless a frozen ranker version is explicitly supplied. No ratings were generated.
+- The HTML and CSV generation passed validation, but iframe playback/layout has not been visually verified in a browser. The earlier generated review HTML still reflects the previous eight-link claim; use the new human-review artifact for review.
+- The in-app browser could not be initialized because its bridge rejected the missing `sandboxPolicy` field. The HTML output and its generation were tested, but iframe playback/layout was not visually verified in a browser.
+
+### Privileged routes and access boundary
+
+- Enumerated FastAPI routes: `/`, `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc`, `/health`, `/readyz`, `/livez`, and `POST /recommend-ad`. There are no admin API routes. `/recommend-ad` is intentionally public in the documented product contract; health/docs routes expose no admin operation.
+- The Streamlit admin page is a UI-only privileged surface: its login uses PBKDF2 password verification, the page itself checks `admin_logged_in`, and production configuration fails closed without admin credentials. The checked-in Nginx example places the dashboard/admin hostname behind `allow`/`deny`, binds both app processes to loopback, and keeps the API on a separate hostname.
+- This is configuration intent only. `nginx` is not installed in this workspace; no final CIDR/domain/certificate/firewall is selected; no proxy config test, external VPN/non-VPN test, or direct-origin reachability test was possible. The example VPN CIDR is a placeholder. Do not claim an enforced proxy boundary until the host-specific checklist records those tests.
+
+### Privacy decisions and hosting checklist
+
+- `docs/owner-decisions.md` remains the owner decision sheet. All proposals remain explicitly **Awaiting approval**: video metadata/history 30 days, raw events and feedback 90 days, request logs 30 days, encrypted daily off-host backups with 30-day expiry, RPO at most 24 hours, and RTO within four hours. Hosting region/jurisdiction, admin boundary, and incident/privacy contacts also await owner selection. No retention is enabled by this sheet.
+- `docs/hosting-verification-checklist.md` remains unchecked and covers durable local storage, network/firewall/TLS, resource limits, monitoring, backup/restore, rollback, and release gates. No hosting item is represented as live-tested.
+
+### Dependency lock and CI
+
+- Corrected the lock input to resolve the pinned Python 3.14 set from `requirements-linux-py314.in`, added pinned `pip-tools==7.5.2`, regenerated `requirements-linux-py314.txt` with hashes, and changed README installation guidance to use `pip install --require-hashes -r requirements-linux-py314.txt`.
+- A clean Python 3.14.3 Windows virtual environment installed the full lock using `pip install --require-hashes`; `pip check` passed. To check Linux wheel availability/hash coverage, ran `pip download --only-binary=:all: --require-hashes --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 --python-version 3.14 --implementation cp --abi cp314 --abi abi3 -r requirements-linux-py314.txt`; it downloaded the complete Linux wheel set successfully. This validates resolved artifacts and hashes for the selected Linux platform tags, but it is not an installation or test run inside Linux.
+- Reviewed `.github/workflows/quality.yml`; added `workflow_dispatch` and retained evaluation JSON as an Actions artifact. The workflow covers locked install, tests, compile, `pip check`, pip-audit, Bandit, Ruff, whitespace validation, and offline evaluation.
+- Hosted CI was not run. `gh` is absent; the available session has no GitHub workflow-dispatch credentials/tool; local changes are not on a hosted runner. Triggering it would require pushing or a credentialed dispatch of these changes, and push is explicitly prohibited for this task. The local Git remote is read-only for this task.
+
+### Cold-start measurement
+
+Added stage timers to `EmbeddingService` and `VectorStore`. On the local Windows host, Python 3.14.3, offline cached `all-MiniLM-L6-v2`, 30 catalogue ads, and 537 source titles:
+
+| Measurement | Result |
+|---|---:|
+| First complete recommendation | 16,978.95 ms |
+| Embedding model load | 12,606.02 ms |
+| Dataset read/prepare | 34.98 ms |
+| Batch title encoding | 15,977.27 ms (includes model load; nested, do not add to model load) |
+| Normalization and index build | 4.06 ms |
+| Process RSS after cold request | 608.8 MB |
+| Warm calls (10) | median 72.64 ms; maximum 123.76 ms |
+
+This is a local single-process microbenchmark, not concurrent warm latency, Linux behavior, a production SLO, or capacity evidence. The earlier four-simultaneous-cold API run (4/4 HTTP 200, 29.87 s total, peak API RSS 644.3 MB) remains the only concurrent sample; public capacity is still unknown. No speculative optimization or ranking-weight change was made.
+
+### Final local verification
+
+Executed from the fresh locked environment with `HF_HUB_OFFLINE=1`:
+
+| Command/check | Result |
+|---|---|
+| `python -m pip install --require-hashes -r requirements-linux-py314.txt` | Pass in clean isolated Windows Python 3.14.3 environment |
+| `python -m pip check` | Pass: no broken requirements |
+| `python -m unittest discover -s tests -v` | Pass: 31 tests |
+| `python -m compileall -q backend frontend tests` | Pass |
+| `ruff check --select E4,E7,E9,F backend frontend tests` | Pass: all checks passed |
+| `bandit -r backend frontend -ll` | Pass: 2,933 lines; zero issues |
+| `pip-audit --local` | Pass: no known vulnerabilities in the locked environment |
+| `git diff --check` | Pass; only line-ending notices |
+| Offline evaluator against original CSV | `awaiting_labels`; 12 videos, 120 pending, zero rated, metrics null |
+| Linux target wheel download with hashes | Pass for manylinux 2.28 / manylinux2014, CPython 3.14 and abi3; not a Linux install |
+
+### Remaining release blockers and required decisions
+
+1. Human reviewers must confirm the eight embedded sources, supply verified URLs for the three unresolved titles and decide whether to exclude the conflicting EMMA record, then label complete candidate sets. Keep held-out labels out of tuning.
+2. Owner approval is still required for all retention periods, backup expiry, RPO/RTO, hosting provider/region/jurisdiction, VPN CIDR or identity-aware proxy, incident/privacy contacts, and backup destination/key custody. Publish the privacy notice and configure the approved policy before public collection.
+3. A deployment operator must configure and test the actual VPN/proxy/firewall/TLS boundary, durable storage, resource limits, monitoring, encrypted scheduled backups, timed restore, and rollback using the hosting checklist.
+4. After these local changes are committed through the normal review path, run the updated hosted workflow on its Linux runner. The wheel check passed, but actual Linux installation/tests and hosted CI remain unverified.
+5. Define acceptable cold/warm latency and measure both services together on the selected host under representative concurrency before setting a capacity target.
+
+No deployment, public exposure, production-data modification, label inference, or ranking-weight change was performed.
+
+## Labeling workflow follow-up (2026-10-20)
+
+- Preserved all pre-existing worktree changes and generated files. `docs/recommendation-labels.csv` remains unchanged: 12 video keys, 120 unique pairs, all pending, zero ratings. The new `artifacts/recommendation-labels-human-review.csv` is a separate 120-pair copy, also all pending with zero ratings. `artifacts/recommendation-human-review.html` renders all 12 full sets with split, stable key, source context, ad names/descriptions/categories/modes, rating controls, and notes.
+- Corrected source evidence: four of eight candidate URLs have official YouTube result metadata corroborating title/channel/date (Dani / Show Music Romania, WSJ, New Travel Insight, Edureka). Four candidate URLs remain uncertain and are unembedded. Three records still lack a source URL; EMMA has a 2025 similarly titled result conflicting with packet date 2020-10-21. Exact missing evidence and safe manual checks are in `docs/recommendation-video-source-matches.md`. Metadata confirmation does not establish footage identity.
+- Reviewer exports separate development and held-out CSVs. Evaluator now validates identifiers, unique video/ad pairs, integer ratings 0–3, rated rows missing a score, reference-packet pair completeness, and unchanged split membership. Default output hides held-out label distributions and per-video completeness; a separate explicit flag plus frozen ranker version is required to expose held-out metrics/examples. Ranking code/weights were not changed.
+- Final reviewer-generation command: `python -m backend.services.labeling_review --input artifacts/recommendation-labels-human-review.csv --manifest docs/recommendation-labels.csv --output artifacts/recommendation-human-review.html` — 12 video groups, 120 pairs, zero labels changed.
+- Final evaluator command: `python -m backend.services.offline_evaluation --labels docs/recommendation-labels.csv --packet docs/recommendation-labels.csv --output artifacts/recommendation-evaluation-labeling-check.json --k 5` — `awaiting_labels`, 12 videos, 120 pairs, 0 rated, 120 pending, 0 complete development sets, null metrics, no inferred labels, held-out metrics sealed.
+- Verification: `HF_HUB_OFFLINE=1 python -m unittest discover -s tests -v` — 39 tests passed; `python -m compileall -q backend frontend tests` passed; `python -m pip check` passed; `git diff --check` passed. Ruff and Bandit were not rerun for this continuation: the configured executables under the prior audit's `%LOCALAPPDATA%\Temp\admind-security-tools` location returned access denied from the current sandbox, and neither module is installed in the active Python environment. The earlier audit's scans predate these evaluation changes.
+
+### Remaining labeling blockers
+
+Obtain human review of the four uncertain candidate URLs and footage confirmation for the four metadata-confirmed candidates. Obtain original IDs/URLs and resolve title/date/footage for TeaserCon, The Audio Culture Academy, ShortsBreak, and EMMA Fitness; do not substitute similar titles. Then label every candidate in each video set without showing held-out ratings to ranking/tuning contributors. No recommendation-quality claim is supported until independent human labels are evaluated.
+
+## Ruff and Bandit follow-up (2026-10-20)
+
+This entry supersedes the previous note that these scanners could not be rerun. No `pyproject.toml`, `ruff.toml`, `.ruff.toml`, `.bandit`, `bandit.yaml`, `bandit.yml`, `setup.cfg`, or `tox.ini` exists in the repository. The effective Ruff configuration is the CI command in `.github/workflows/quality.yml`; Bandit has no repository-specific config/exclusions and CI invokes its default recursive scan.
+
+The active project Python 3.14.3 environment and `.venv-ci-check` did not contain Ruff or Bandit, and no project venv was present. To avoid changing app dependencies or the production lock, installed only the pinned development tools into a fresh temporary environment under `%TEMP%`:
+
+```powershell
+python -m venv $env:TEMP\admind-ruff-bandit-<unique>
+<tools-env>\Scripts\python.exe -m pip install ruff==0.17.1 bandit==1.9.4
+<tools-env>\Scripts\python.exe -m ruff check --select E4,E7,E9,F backend frontend tests
+<tools-env>\Scripts\python.exe -m bandit -r backend frontend -ll
+```
+
+Results: Ruff 0.17.1 reported `All checks passed!`; Bandit 1.9.4 on Python 3.14.3 reported no issues, with 3,009 lines scanned, zero skipped files, and zero skipped potential issues. The test suite was rerun: 39 passed. `git diff --check` passed. No source code, production requirements, or lock files were changed during this scanner-verification follow-up. The environment is isolated under the OS temp directory, outside the repository.

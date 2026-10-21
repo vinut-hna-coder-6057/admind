@@ -20,6 +20,8 @@ class LabelingReviewTests(unittest.TestCase):
             "source_video_url_verified": "true",
             "source_video_verified_by": "reviewer@example.test",
             "source_video_verified_at": "2026-10-20",
+            "source_video_verification_source": "https://www.youtube.com/watch?v=" + VIDEO_ID,
+            "source_video_verification_method": "Compared official title and channel",
         }
         row.update(overrides)
         return row
@@ -28,6 +30,7 @@ class LabelingReviewTests(unittest.TestCase):
         row = self.row()
         self.assertEqual(verified_youtube_id(row), VIDEO_ID)
         self.assertEqual(verified_youtube_id(self.row(source_video_verified_by="")), "")
+        self.assertEqual(verified_youtube_id(self.row(source_video_verification_source="")), "")
         self.assertEqual(verified_youtube_id(self.row(source_video_url_verified="false")), "")
         self.assertEqual(verified_youtube_id(self.row(source_video_url=f"http://youtu.be/{VIDEO_ID}")), "")
         self.assertEqual(verified_youtube_id(self.row(source_video_url=f"https://example.test/{VIDEO_ID}")), "")
@@ -37,6 +40,7 @@ class LabelingReviewTests(unittest.TestCase):
         self.assertIn("https://www.youtube-nocookie.com/embed/${videoIdForEmbed}", html)
         self.assertIn("verified && verifier && verifiedAt", html)
         self.assertIn(VIDEO_ID, html)
+        self.assertIn("Open unverified candidate on YouTube to check identity", html)
         self.assertIn("A detailed description", html)
         unverified = render_review_html(pd.DataFrame([self.row(source_video_url_verified="false")]))
         self.assertIn('"source_video_url_verified": "false"', unverified)

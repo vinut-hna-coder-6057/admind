@@ -18,6 +18,8 @@ def verified_youtube_id(row):
         return ""
     if not str(row.get("source_video_verified_by", "")).strip() or not str(row.get("source_video_verified_at", "")).strip():
         return ""
+    if not str(row.get("source_video_verification_source", "")).strip() or not str(row.get("source_video_verification_method", "")).strip():
+        return ""
     try:
         parsed = urlparse(str(row.get("source_video_url", "")).strip())
     except ValueError:
@@ -31,7 +33,8 @@ def verified_youtube_id(row):
             video_id = parse_qs(parsed.query).get("v", [""])[0]
         elif parsed.path.startswith("/embed/"):
             video_id = parsed.path.split("/")[2]
-    return video_id if len(video_id) == 11 and video_id.replace("_", "a").replace("-", "a").isalnum() else ""
+    valid_id = len(video_id) == 11 and video_id.isascii() and all(char.isalnum() or char in "_-" for char in video_id)
+    return video_id if valid_id else ""
 
 
 def render_review_html(frame: pd.DataFrame) -> str:
@@ -40,6 +43,8 @@ def render_review_html(frame: pd.DataFrame) -> str:
         raise ValueError(f"Review packet is missing columns: {', '.join(sorted(missing))}")
     if frame.empty:
         raise ValueError("Review packet has no video-ad pairs")
+    if frame[["video_id", "video_title", "ad_id"]].isna().any().any() or frame[["video_id", "video_title", "ad_id"]].astype(str).apply(lambda col: col.str.strip().eq("")).any().any():
+        raise ValueError("Review packet video_id, video_title, and ad_id values cannot be blank")
     if frame.duplicated(["video_id", "ad_id"]).any():
         raise ValueError("Review packet contains duplicate video/ad identifiers")
 
@@ -72,10 +77,11 @@ button:disabled {{ background:#64748b; cursor:not-allowed }}
 <body>
 <h1>{title}</h1>
 <p>Review every candidate under each video together. This page contains no model ranks, scores, or selection cues. Save the downloaded CSV as a new review file; do not overwrite the source packet.</p>
-<section class="notice"><strong>Video evidence:</strong> Source records have no verified video IDs. Footage is embedded only when the packet has a verified HTTPS YouTube URL, verifier, and verification date. Verify the video against its recorded title and channel before adding those fields. Otherwise judge recorded metadata only; mark <em>insufficient information</em> when it does not support a responsible judgment. Do not infer from category alone.</section>
+<section class="notice"><strong>Video evidence:</strong> The source dataset has no video IDs. Footage is embedded only when a separate review copy contains a provenance-backed HTTPS YouTube URL, verifier, and verification date. Confirm that the embedded footage matches the recorded title and channel before judging; a URL match is not a relevance label. For records without a verified URL, use only recorded metadata and mark <em>insufficient information</em> when it cannot support a responsible judgment. Do not infer from category alone.</section>
 <p id="progress" class="meta" aria-live="polite"></p>
 <main id="reviews"></main>
-<button id="export" type="button">Download reviewed CSV</button>
+<button id="export-dev" type="button">Download development labels</button>
+<button id="export-held" type="button">Download sealed held-out labels</button>
 <p id="message" role="status" aria-live="polite"></p>
 <script id="packet" type="application/json">{payload}</script>
 <script>
@@ -89,9 +95,12 @@ for (const [videoId, candidates] of groups) {{
   const first=candidates[0], section=document.createElement("section"); section.className="video";
   text(section,"h2",first.video_title);
   text(section,"p",`Source: ${{first.source_dataset || "not provided"}}, row ${{first.source_row || "not provided"}} · Channel: ${{first.source_channel || "not provided"}} · Published: ${{first.source_published_at || "not provided"}}`,"meta");
-  text(section,"p",`Recorded source category: ${{first.source_category || "not provided"}} (fit: ${{first.source_category_fit || "unverified"}}). Stable source-record key: ${{videoId}}; this is not a YouTube ID. Candidate count: ${{candidates.length}}.`,"meta");
+  text(section,"p",`Split: ${{first.split || "not provided"}}. Recorded source category: ${{first.source_category || "not provided"}} (fit: ${{first.source_category_fit || "unverified"}}). Stable source-record key: ${{videoId}}; this is not a YouTube ID. Candidate count: ${{candidates.length}}.`,"meta");
+  text(section,"p",`Source match review: ${{first.source_video_match_status || "not audited"}}. ${{first.source_video_match_notes || "No source-match evidence recorded."}}`,"meta");
   const verified=["true","yes","1"].includes(String(first.source_video_url_verified || "").trim().toLowerCase());
   const verifier=String(first.source_video_verified_by || "").trim(), verifiedAt=String(first.source_video_verified_at || "").trim();
+  const verificationMethod=String(first.source_video_verification_method || "").trim();
+  const verificationSource=String(first.source_video_verification_source || "").trim();
   const rawUrl=String(first.source_video_url || "").trim();
   let videoIdForEmbed="";
   try {{
@@ -99,9 +108,13 @@ for (const [videoId, candidates] of groups) {{
     if(u.protocol==="https:" && host==="youtu.be") videoIdForEmbed=u.pathname.split("/").filter(Boolean)[0] || "";
     if(u.protocol==="https:" && ["youtube.com","m.youtube.com","youtube-nocookie.com"].includes(host)) videoIdForEmbed=u.searchParams.get("v") || u.pathname.match(/^\\/embed\\/([A-Za-z0-9_-]{{11}})$/)?.[1] || "";
   }} catch {{}}
-  if(verified && verifier && verifiedAt && /^[A-Za-z0-9_-]{{11}}$/.test(videoIdForEmbed)) {{
+  if(/^[A-Za-z0-9_-]{{11}}$/.test(videoIdForEmbed)) {{
+    const sourceLink=document.createElement("a"); sourceLink.href=`https://www.youtube.com/watch?v=${{videoIdForEmbed}}`; sourceLink.target="_blank"; sourceLink.rel="noopener noreferrer"; sourceLink.textContent=verified ? "Open source video on YouTube" : "Open unverified candidate on YouTube to check identity"; section.appendChild(sourceLink);
+  }}
+  if(verified && verifier && verifiedAt && verificationSource && verificationMethod && /^[A-Za-z0-9_-]{{11}}$/.test(videoIdForEmbed)) {{
     const frame=document.createElement("iframe"); frame.title="Verified source video"; frame.width="560"; frame.height="315"; frame.loading="lazy"; frame.referrerPolicy="strict-origin-when-cross-origin"; frame.allowFullscreen=true; frame.src=`https://www.youtube-nocookie.com/embed/${{videoIdForEmbed}}`; section.appendChild(frame);
     text(section,"p",`Video URL verified by ${{verifier}} on ${{verifiedAt}}.`,"meta");
+    text(section,"p",`Verification basis: ${{verificationMethod || "not provided"}}. Source: ${{verificationSource || rawUrl}}`,"meta");
   }}
   const grid=document.createElement("div"); grid.className="ad-grid";
   for (const row of candidates) {{
@@ -125,15 +138,18 @@ for (const [videoId, candidates] of groups) {{
   }}
   section.appendChild(grid); root.appendChild(section);
 }}
-const progress=()=>{{ const complete=[...groups.values()].filter(g=>g.every(r=>r.judgment_status==="rated" || r.judgment_status==="insufficient_information")).length; document.getElementById("progress").textContent=`${{groups.size}} video sets · ${{rows.length}} pairs · ${{complete}} sets fully reviewed (sets with insufficient-information rows remain excluded from metrics)`; }};
+const progress=()=>{{ const complete=[...groups.values()].filter(g=>g.every(r=>r.judgment_status==="rated" || r.judgment_status==="insufficient_information")).length; document.getElementById("progress").textContent=`${{groups.size}} video sets · ${{rows.length}} pairs · ${{complete}} sets reviewed; only sets with numeric 0–3 ratings on every candidate enter metrics. Held-out labels must remain sealed until the ranker is frozen.`; }};
 root.addEventListener("change",progress); root.addEventListener("input",progress); progress();
 const quote=value=>`"${{String(value ?? "").replaceAll('"','""')}}"`;
-document.getElementById("export").addEventListener("click",()=>{{
+const exportSplit=(split)=>{{
   const incomplete=rows.filter(r=>r.judgment_status==="rated" && !["0","1","2","3"].includes(String(r.relevance)));
   if(incomplete.length) {{ document.getElementById("message").textContent=`${{incomplete.length}} rows marked Rated need a 0–3 score.`; return; }}
-  const headers=Object.keys(rows[0]); const csv=[headers.map(quote).join(","),...rows.map(r=>headers.map(k=>quote(r[k])).join(","))].join("\\r\\n");
-  const blob=new Blob(["\\ufeff",csv],{{type:"text/csv;charset=utf-8"}}); const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download="recommendation-labels-reviewed.csv"; link.click(); URL.revokeObjectURL(url); document.getElementById("message").textContent="Downloaded. Keep this file separate from the source packet until it has been reviewed.";
-}});
+  const selected=rows.filter(r=>(r.split || "all")===split);
+  const headers=Object.keys(rows[0]); const csv=[headers.map(quote).join(","),...selected.map(r=>headers.map(k=>quote(r[k])).join(","))].join("\\r\\n");
+  const blob=new Blob(["\\ufeff",csv],{{type:"text/csv;charset=utf-8"}}); const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=`recommendation-labels-${{split}}-reviewed.csv`; link.click(); URL.revokeObjectURL(url); document.getElementById("message").textContent=`Downloaded ${{split}} labels separately. Keep held-out labels sealed from ranking changes until the ranker is frozen.`;
+}};
+document.getElementById("export-dev").addEventListener("click",()=>exportSplit("development"));
+document.getElementById("export-held").addEventListener("click",()=>exportSplit("held_out"));
 </script>
 </body></html>
 """
@@ -143,6 +159,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="docs/recommendation-labels.csv")
     parser.add_argument("--output", default="artifacts/recommendation-review.html")
+    parser.add_argument("--manifest", default="docs/recommendation-labels.csv", help="Frozen packet used to verify all candidate pairs are present")
     args = parser.parse_args()
     source = Path(args.input)
     output = Path(args.output)
@@ -151,6 +168,17 @@ def main():
     if not output.is_absolute():
         output = ROOT / output
     frame = pd.read_csv(source, keep_default_na=False)
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_absolute():
+        manifest_path = ROOT / manifest_path
+    manifest = pd.read_csv(manifest_path, keep_default_na=False)
+    key = ["video_id", "ad_id"]
+    if set(key) - set(frame.columns) or set(key) - set(manifest.columns):
+        raise ValueError("Review input and manifest require video_id and ad_id columns")
+    expected = set(map(tuple, manifest[key].astype(str).values.tolist()))
+    actual = set(map(tuple, frame[key].astype(str).values.tolist()))
+    if frame.duplicated(key).any() or expected != actual:
+        raise ValueError(f"Review input candidate pairs do not match complete manifest: missing={len(expected-actual)}, unexpected={len(actual-expected)}")
     document = render_review_html(frame)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")

@@ -147,6 +147,11 @@ def _complete_queries(labels):
     if invalid:
         raise ValueError(f"Invalid judgment_status values: {invalid}")
     relevance = pd.to_numeric(labels.relevance, errors="coerce")
+    supplied = labels.relevance.fillna("").astype(str).str.strip().ne("")
+    if (supplied & relevance.isna()).any():
+        raise ValueError("Relevance values must be integer numbers from 0 through 3.")
+    if (supplied & (~relevance.between(0, 3) | (relevance % 1 != 0))).any():
+        raise ValueError("Relevance values must be integer numbers from 0 through 3.")
     if ((labels.judgment_status == "rated") & relevance.isna()).any():
         raise ValueError("Rated rows must have a relevance label.")
     if ((labels.judgment_status != "rated") & relevance.notna()).any():
@@ -170,26 +175,68 @@ def _complete_queries(labels):
     return labels[labels.video_id.isin(complete)], excluded
 
 
-def evaluate(labels_path, output_path, k=5):
+def validate_packet(labels, packet_path=None):
+    """Validate labels against the frozen candidate-pair manifest."""
+    if packet_path is None:
+        packet_path = Path(__file__).resolve().parents[2] / "docs" / "recommendation-labels.csv"
+    packet = pd.read_csv(packet_path, keep_default_na=False)
+    if "video_id" not in packet.columns or not ({"ad_id", "ad_name"} & set(packet.columns)):
+        raise ValueError("Reference packet requires video_id and an ad_id or ad_name column.")
+    key = "ad_id" if "ad_id" in labels and "ad_id" in packet else "ad_name"
+    if key not in labels or key not in packet:
+        raise ValueError(f"Labels and reference packet must both contain {key}.")
+    if "split" in packet and "split" in labels:
+        label_splits = set(labels.split.astype(str).str.strip())
+        if label_splits and label_splits.issubset({"development", "held_out"}):
+            packet = packet[packet.split.astype(str).isin(label_splits)]
+    expected = set(zip(packet.video_id.astype(str).str.strip(), packet[key].astype(str).str.strip()))
+    actual = set(zip(labels.video_id.astype(str).str.strip(), labels[key].astype(str).str.strip()))
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    if missing or extra:
+        raise ValueError(
+            f"Incomplete candidate packet: missing {len(missing)} expected pairs, "
+            f"unexpected {len(extra)} pairs (reference: {packet_path})."
+        )
+    if "split" in packet and "split" in labels:
+        expected_splits = dict(zip(zip(packet.video_id.astype(str), packet[key].astype(str)), packet.split.astype(str)))
+        for row in labels.itertuples(index=False):
+            pair = (str(row.video_id), str(getattr(row, key)))
+            if str(row.split) in {"development", "held_out"} and str(row.split) != expected_splits[pair]:
+                raise ValueError(f"Split changed for candidate pair {pair[0]}/{pair[1]}.")
+
+
+def evaluate(labels_path, output_path, k=5, packet_path=None, include_held_out=False, frozen_ranker_version=None):
     labels = pd.read_csv(labels_path)
     required = {"video_id", "video_title", "ad_name", "relevance"}
     if not required.issubset(labels.columns):
         raise ValueError(f"Labels require columns: {', '.join(sorted(required))}")
     if labels.empty:
         raise ValueError("No video-ad pairs found in label file.")
-    if labels[["video_id", "video_title", "ad_name"]].isna().any().any():
-        raise ValueError("video_id, video_title, and ad_name cannot be blank.")
-    if labels.duplicated(["video_id", "ad_name"]).any():
-        raise ValueError("Duplicate video_id/ad_name pairs found.")
+    for column in ("video_id", "video_title", "ad_name"):
+        if labels[column].isna().any() or labels[column].astype(str).str.strip().eq("").any():
+            raise ValueError(f"{column} cannot be blank.")
+    if "ad_id" in labels and (labels.ad_id.isna().any() or labels.ad_id.astype(str).str.strip().eq("").any()):
+        raise ValueError("ad_id cannot be blank.")
+    pair_key = "ad_id" if "ad_id" in labels else "ad_name"
+    if labels.duplicated(["video_id", pair_key]).any():
+        raise ValueError(f"Duplicate video_id/{pair_key} labels found.")
     if (labels.groupby("video_id").video_title.nunique() != 1).any():
         raise ValueError("Each video_id must have one consistent video_title.")
     if "split" not in labels:
         labels["split"] = "all"
     if not set(labels.split.dropna().unique()).issubset({"development", "held_out", "all"}):
         raise ValueError("split must be development, held_out, or all.")
+    validate_packet(labels, packet_path)
 
-    complete, excluded = _complete_queries(labels)
-    rated_values = pd.to_numeric(labels.loc[labels.get("judgment_status", pd.Series("rated", index=labels.index)) == "rated", "relevance"], errors="coerce").dropna()
+    complete_all, excluded = _complete_queries(labels)
+    if include_held_out and not str(frozen_ranker_version or "").strip():
+        raise ValueError("Held-out evaluation requires --frozen-ranker-version after the ranker is frozen.")
+    complete = complete_all if include_held_out else complete_all[complete_all.split != "held_out"]
+    visible_labels = labels if include_held_out else labels[labels.split != "held_out"]
+    visible_excluded = excluded if include_held_out else [item for item in excluded if item["split"] != "held_out"]
+    status_col = visible_labels.get("judgment_status", pd.Series("rated", index=visible_labels.index))
+    rated_values = pd.to_numeric(visible_labels.loc[status_col == "rated", "relevance"], errors="coerce").dropna()
     relevance_distribution = {str(value): int((rated_values == value).sum()) for value in range(4)}
     base_report = {
         "status": "awaiting_labels" if complete.empty else "evaluated",
@@ -199,7 +246,8 @@ def evaluate(labels_path, output_path, k=5):
         "pending_pairs": int((labels.judgment_status.fillna("pending") == "pending").sum()) if "judgment_status" in labels else int(labels.relevance.isna().sum()),
         "insufficient_information_pairs": int((labels.judgment_status == "insufficient_information").sum()) if "judgment_status" in labels else 0,
         "complete_labeled_videos": int(complete.video_id.nunique()),
-        "excluded_incomplete_videos": excluded,
+        "held_out_evaluation": "included_after_freeze" if include_held_out else "sealed; no held-out metrics exposed",
+        "excluded_incomplete_videos": visible_excluded,
         "k": k,
         "label_scale": "0 irrelevant; 1 weak/incidental; 2 relevant; 3 highly relevant and useful",
         "relevance_distribution": relevance_distribution,
@@ -213,6 +261,8 @@ def evaluate(labels_path, output_path, k=5):
             "The selected sample is small and the held-out split is diagnostic, not statistically conclusive.",
         ],
     }
+    if include_held_out:
+        base_report["frozen_ranker_version"] = str(frozen_ranker_version).strip()
     if not complete.empty:
         complete = _score_rows(complete)
         base_report["metrics"] = {}
@@ -230,7 +280,7 @@ def evaluate(labels_path, output_path, k=5):
                 "candidate": _metric_summary(grouped, "candidate_score", k, "candidate_lexical_tiebreak", "candidate_eligible"),
             }
         held = complete[complete.split == "held_out"]
-        if not held.empty:
+        if include_held_out and not held.empty:
             base_report["top_candidate_examples"] = _examples(held, k)[:20]
             base_report["candidate_worse_than_baseline_examples"] = _examples(held, k, worse_only=True)[:20]
         scored_path = Path(output_path).with_name(Path(output_path).stem + "-scored-pairs.csv")
@@ -251,10 +301,14 @@ def main():
     parser.add_argument("--labels", required=True, help="Human-labeled packet CSV")
     parser.add_argument("--output", default="artifacts/recommendation-evaluation.json")
     parser.add_argument("--k", type=int, default=5)
+    parser.add_argument("--packet", help="Frozen packet CSV used to validate exact candidate completeness (defaults to docs/recommendation-labels.csv)")
+    parser.add_argument("--include-held-out-after-freeze", action="store_true", help="Expose held-out scores only after the ranker is frozen")
+    parser.add_argument("--frozen-ranker-version", help="Required ranker identifier/version when exposing held-out evaluation")
     args = parser.parse_args()
     if args.k < 1:
         parser.error("--k must be positive")
-    print(json.dumps(evaluate(args.labels, args.output, args.k), indent=2, ensure_ascii=False))
+    print(json.dumps(evaluate(args.labels, args.output, args.k, args.packet,
+                              args.include_held_out_after_freeze, args.frozen_ranker_version), indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

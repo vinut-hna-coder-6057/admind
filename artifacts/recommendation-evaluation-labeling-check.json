@@ -1,0 +1,84 @@
+{
+  "status": "awaiting_labels",
+  "candidate_packet_videos": 12,
+  "candidate_packet_pairs": 120,
+  "rated_pairs": 0,
+  "pending_pairs": 120,
+  "insufficient_information_pairs": 0,
+  "complete_labeled_videos": 0,
+  "held_out_evaluation": "sealed; no held-out metrics exposed",
+  "excluded_incomplete_videos": [
+    {
+      "video_id": "ytanalytics-0b439f02410833cc",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-650780549f26b010",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-6c6d31afe506c417",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-76ad999bc3313535",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-8454b09a8b920d0c",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-85da52884b9ba454",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-982d9e486d18f62a",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-cd033fa2905e0141",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    },
+    {
+      "video_id": "ytanalytics-ea8ea81ebb13a6ff",
+      "split": "development",
+      "pending_pairs": 10,
+      "insufficient_information_pairs": 0
+    }
+  ],
+  "k": 5,
+  "label_scale": "0 irrelevant; 1 weak/incidental; 2 relevant; 3 highly relevant and useful",
+  "relevance_distribution": {
+    "0": 0,
+    "1": 0,
+    "2": 0,
+    "3": 0
+  },
+  "metrics": null,
+  "top_candidate_examples": [],
+  "candidate_worse_than_baseline_examples": [],
+  "limitations": [
+    "The content baseline is max(title-description cosine, inferred-category-ad-category cosine); it excludes historical production mode, CTR, feedback, and session signals.",
+    "The candidate replays title-to-offering cosine, lexical tie-breaks, and duplicate suppression on judged candidates; it does not claim intent understanding.",
+    "Metrics use fully judged candidate sets only. Recall is relative to the packet candidates, not every possible ad.",
+    "The selected sample is small and the held-out split is diagnostic, not statistically conclusive."
+  ],
+  "note": "No fully judged videos: quality metrics and human-labeled failure examples are not available. No labels were inferred."
+}
